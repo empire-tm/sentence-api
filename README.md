@@ -127,10 +127,8 @@ The server responds with relevance scores (higher = better).
 
 | Variable       | Default | Description                                                     |
 | -------------- | ------- | --------------------------------------------------------------- |
-| `EMBED_MODEL`  | —       | HuggingFace / SentenceTransformers model for `/v1/embeddings`. |
-| `RERANK_MODEL` | —       | Cross-encoder model for `/v1/rerank`.                           |
-
-If a variable is not set the corresponding endpoint returns **404 – model not loaded**.
+| `EMBED_MODEL`  | `all-MiniLM-L6-v2` | HuggingFace / SentenceTransformers model for `/v1/embeddings`. |
+| `RERANK_MODEL` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Cross-encoder model for `/v1/rerank`.                           |
 
 ---
 
