@@ -1,6 +1,6 @@
 # Sentence API
 
-OpenAI‑compatible API providing **sentence embeddings** and **cross‑encoder re‑ranking** powered by [Sentence Transformers](https://www.sbert.net/) and [FastAPI](https://fastapi.tiangolo.com/).
+OpenAI-compatible API providing **sentence embeddings** and **cross-encoder re-ranking** powered by [Sentence Transformers](https://www.sbert.net/) and [FastAPI](https://fastapi.tiangolo.com/).
 
 ---
 
@@ -12,7 +12,7 @@ OpenAI‑compatible API providing **sentence embeddings** and **cross‑encoder 
 | `POST /v1/rerank`     | Score / reorder candidate documents for a query. |
 | `GET  /healthz`       | Liveness probe for your orchestrator.            |
 
-Both `/v1/*` routes follow the OpenAI API schema so you can drop‑in replace OpenAI calls with your own self‑hosted inference.
+Both `/v1/*` routes follow the OpenAI API schema so you can drop-in replace OpenAI calls with your own self-hosted inference.
 
 ---
 
@@ -32,7 +32,7 @@ docker run -p 8080:8080 ghcr.io/empire-tm/sentence-api:latest
 
 ### TL;DR (GPU)
 
-If your host has an NVIDIA GPU and the *nvidia‑container‑toolkit* is installed:
+If your host has an NVIDIA GPU and the *nvidia-container-toolkit* is installed:
 
 ```bash
 docker run --gpus all -p 8080:8080 \
@@ -102,13 +102,13 @@ curl http://localhost:8080/v1/embeddings \
       }'
 ```
 
-### Re‑rank documents
+### Re-rank documents
 
 ```bash
 curl http://localhost:8080/v1/rerank \
   -H "Content-Type: application/json" \
   -d '{
-        "query": "What is the air‑speed of an unladen swallow?",
+        "query": "What is the air-speed of an unladen swallow?",
         "documents": [
           {"text": "African or European?"},
           {"text": "It depends on the swallow."}
@@ -128,7 +128,7 @@ The server responds with relevance scores (higher = better).
 | Variable       | Default | Description                                                     |
 | -------------- | ------- | --------------------------------------------------------------- |
 | `EMBED_MODEL`  | —       | HuggingFace / SentenceTransformers model for `/v1/embeddings`. |
-| `RERANK_MODEL` | —       | Cross‑encoder model for `/v1/rerank`.                           |
+| `RERANK_MODEL` | —       | Cross-encoder model for `/v1/rerank`.                           |
 
 If a variable is not set the corresponding endpoint returns **404 – model not loaded**.
 
@@ -136,7 +136,7 @@ If a variable is not set the corresponding endpoint returns **404 – model not 
 
 ## Supported models
 
-Any model compatible with [SentenceTransformers](https://www.sbert.net/docs/pretrained_models.html) or [CrossEncoder](https://www.sbert.net/docs/pretrained_models.html#cross-encoders) works out‑of‑the‑box.
+Any model compatible with [SentenceTransformers](https://www.sbert.net/docs/pretrained_models.html) or [CrossEncoder](https://www.sbert.net/docs/pretrained_models.html#cross-encoders) works out-of-the-box.
 
 Popular choices:
 
@@ -144,7 +144,14 @@ Popular choices:
 * `multi-qa-MiniLM-L6-cos-v1`
 * `cross-encoder/ms-marco-MiniLM-L-6-v2`
 
-To serve multiple models run multiple containers, each pre‑loaded with a different model.
+To serve multiple models run multiple containers, each pre-loaded with a different model.
+
+---
+
+## Acknowledgements
+
+This project was inspired by the **[stapi](https://github.com/substratusai/stapi)** project from SubstratusAI.  
+Thanks to the stapi team for the idea and motivation!
 
 ---
 

@@ -89,7 +89,12 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+        lifespan=lifespan, 
+        version="0.0.2", 
+        title="Sentence API",
+        summary="OpenAI-compatible API providing sentence embeddings and cross-encoder re-ranking powered by Sentence Transformers and FastAPI."
+    )
 
 
 # ---------------- Endpoints ---------------- #
