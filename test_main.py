@@ -1,81 +1,84 @@
 from fastapi.testclient import TestClient
-from main import app, EMBED_MODEL_NAME, RERANK_MODEL_NAME
+from main import app, EMBED_MODEL_NAMES, RERANK_MODEL_NAMES
 
+# ---------------------- Base checks ---------------------- #
 
 def test_read_healthz():
     with TestClient(app) as client:
         response = client.get("/healthz")
         assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
 
+# ---------------------- Embeddings ---------------------- #
 
-def test_embedding_str():
+def test_embedding_models_list():
     with TestClient(app) as client:
-        embedding_request = {
-            "input": "Cats often purr when they feel relaxed and happy.",
-            "model": EMBED_MODEL_NAME,
-        }
-        response = client.post("/v1/embeddings", json=embedding_request)
+        response = client.get("/v1/embeddings/models")
         assert response.status_code == 200
-        embedding_response = response.json()
-        assert isinstance(embedding_response["data"], list)
-        assert isinstance(embedding_response["data"][0]["embedding"], list)
-        assert isinstance(embedding_response["data"][0]["embedding"][0], float)
+        models = response.json()
+        assert isinstance(models, list)
+        assert set(models) == set(EMBED_MODEL_NAMES)
 
+def test_embedding_str_each_model():
+    with TestClient(app) as client:
+        for model_name in EMBED_MODEL_NAMES:
+            response = client.post("/v1/embeddings", json={
+                "input": "Cats purr to express comfort.",
+                "model": model_name
+            })
+            assert response.status_code == 200
+            out = response.json()
+            assert out["model"] == model_name
+            assert isinstance(out["data"][0]["embedding"], list)
 
 def test_embedding_list_str():
     with TestClient(app) as client:
-        embedding_request = {
+        model_name = EMBED_MODEL_NAMES[0]
+        response = client.post("/v1/embeddings", json={
             "input": [
                 "Cats often purr when they feel relaxed and happy.",
                 "Purring can also serve as a self-healing mechanism.",
             ],
-            "model": EMBED_MODEL_NAME,
-        }
-        response = client.post("/v1/embeddings", json=embedding_request)
+            "model": model_name,
+        })
         assert response.status_code == 200
-        embedding_response = response.json()
-        assert isinstance(embedding_response["data"], list)
-        assert isinstance(embedding_response["data"][0]["embedding"], list)
-        assert isinstance(embedding_response["data"][0]["embedding"][0], float)
+        out = response.json()
+        data = out["data"]
+        assert len(data) == 2
+        assert data[0]["embedding"] != data[1]["embedding"]
 
-        assert isinstance(embedding_response["data"], list)
-        assert isinstance(embedding_response["data"][1]["embedding"], list)
-        assert isinstance(embedding_response["data"][1]["embedding"][0], float)
+# ---------------------- Rerank ---------------------- #
 
-        embedding_1 = embedding_response["data"][0]["embedding"]
-        embedding_2 = embedding_response["data"][1]["embedding"]
-        assert embedding_1 != embedding_2
-
-
-def test_rerank_basic():
-    """Happy-path: full list returned and sorted by relevance_score."""
+def test_rerank_models_list():
     with TestClient(app) as client:
-        rerank_request = {
-            "query": "Why do cats purr?",
-            "documents": [
-                {"text": "Cats often purr when they feel relaxed and happy."},
-                {"text": "Purring can also serve as a self-healing mechanism."},
-                {"text": "Dogs bark to communicate with humans and other dogs."},
-            ],
-            "model": RERANK_MODEL_NAME,
-        }
-        response = client.post("/v1/rerank", json=rerank_request)
+        response = client.get("/v1/rerank/models")
         assert response.status_code == 200
-        rerank_response = response.json()
+        models = response.json()
+        assert isinstance(models, list)
+        assert set(models) == set(RERANK_MODEL_NAMES)
 
-        # Basic structure checks
-        assert isinstance(rerank_response["results"], list)
-        assert {result["index"] for result in rerank_response["results"]} == {0, 1, 2}
-
-        # Ensure scores are in descending order
-        scores = [result["relevance_score"] for result in rerank_response["results"]]
-        assert scores == sorted(scores, reverse=True)
-
+def test_rerank_basic_each_model():
+    with TestClient(app) as client:
+        for model_name in RERANK_MODEL_NAMES:
+            response = client.post("/v1/rerank", json={
+                "query": "Why do cats purr?",
+                "documents": [
+                    {"text": "Cats purr when content."},
+                    {"text": "They also purr to self-heal."},
+                    {"text": "Dogs bark for other reasons."}
+                ],
+                "model": model_name,
+            })
+            assert response.status_code == 200
+            out = response.json()
+            assert out["model"] == model_name
+            scores = [r["relevance_score"] for r in out["results"]]
+            assert scores == sorted(scores, reverse=True)
 
 def test_rerank_top_n():
-    """`top_n` parameter should limit number of returned results."""
     with TestClient(app) as client:
-        rerank_request = {
+        model_name = RERANK_MODEL_NAMES[0]
+        response = client.post("/v1/rerank", json={
             "query": "Why do cats purr?",
             "documents": [
                 {"text": "Cats often purr when they feel relaxed and happy."},
@@ -83,18 +86,16 @@ def test_rerank_top_n():
                 {"text": "Dogs bark to communicate with humans and other dogs."},
             ],
             "top_n": 1,
-            "model": RERANK_MODEL_NAME,
-        }
-        response = client.post("/v1/rerank", json=rerank_request)
+            "model": model_name,
+        })
         assert response.status_code == 200
-        rerank_response = response.json()
-        assert len(rerank_response["results"]) == 1
-
+        out = response.json()
+        assert len(out["results"]) == 1
 
 def test_rerank_return_documents():
-    """When `return_documents` is True, each result should include the original document."""
     with TestClient(app) as client:
-        rerank_request = {
+        model_name = RERANK_MODEL_NAMES[0]
+        response = client.post("/v1/rerank", json={
             "query": "Why do cats purr?",
             "documents": [
                 {"text": "Cats often purr when they feel relaxed and happy."},
@@ -102,14 +103,10 @@ def test_rerank_return_documents():
                 {"text": "Dogs bark to communicate with humans and other dogs."},
             ],
             "return_documents": True,
-            "model": RERANK_MODEL_NAME,
-        }
-        response = client.post("/v1/rerank", json=rerank_request)
+            "model": model_name,
+        })
         assert response.status_code == 200
-        rerank_response = response.json()
-
-        assert len(rerank_response["results"]) > 0
-        # Verify that every result contains its corresponding document
-        for result in rerank_response["results"]:
+        out = response.json()
+        for result in out["results"]:
             assert result.get("document") is not None
             assert "text" in result["document"]

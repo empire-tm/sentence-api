@@ -6,11 +6,13 @@ OpenAI-compatible API providing **sentence embeddings** and **cross-encoder re-r
 
 ## Features
 
-| Endpoint            | Purpose                                            |
-| ------------------- | -------------------------------------------------- |
-| `POST /v1/embeddings` | Turn text into dense vectors (single string or batch). |
-| `POST /v1/rerank`     | Score / reorder candidate documents for a query. |
-| `GET  /healthz`       | Liveness probe for your orchestrator.            |
+| Endpoint                    | Purpose                                                |
+| --------------------------- | ------------------------------------------------------ |
+| `POST /v1/embeddings`       | Turn text into dense vectors (single string or batch). |
+| `POST /v1/rerank`           | Score / reorder candidate documents for a query.       |
+| `GET  /v1/embeddings/models`| List available embedding models.                       |
+| `GET  /v1/rerank/models`    | List available rerank models.                          |
+| `GET  /healthz`             | Liveness probe for your orchestrator.                  |
 
 Both `/v1/*` routes follow the OpenAI API schema so you can drop-in replace OpenAI calls with your own self-hosted inference.
 
@@ -24,23 +26,27 @@ Both `/v1/*` routes follow the OpenAI API schema so you can drop-in replace Open
 
 ## Running
 
-### TL;DR (CPU)
+### TL;DR (CPU)
 
 ```bash
-docker run -p 8080:8080 ghcr.io/empire-tm/sentence-api:latest
+docker run -p 8080:8080 \
+  -e EMBED_MODEL_NAMES='["all-MiniLM-L6-v2"]' \
+  -e RERANK_MODEL_NAMES='["cross-encoder/ms-marco-MiniLM-L-6-v2"]' \
+  ghcr.io/empire-tm/sentence-api:latest
 ```
 
-### TL;DR (GPU)
+### TL;DR (GPU)
 
 If your host has an NVIDIA GPU and the *nvidia-container-toolkit* is installed:
 
 ```bash
 docker run --gpus all -p 8080:8080 \
-  -e EMBED_MODEL=all-MiniLM-L6-v2 \
+  -e EMBED_MODEL_NAMES='["all-MiniLM-L6-v2","paraphrase-mpnet-base-v2"]' \
+  -e RERANK_MODEL_NAMES='["cross-encoder/ms-marco-MiniLM-L-6-v2"]' \
   ghcr.io/empire-tm/sentence-api:latest
 ```
 
-### Docker Compose
+### Docker Compose
 
 Create **docker-compose.yml**:
 
@@ -51,8 +57,8 @@ services:
     ports:
       - "8080:8080"
     environment:
-      EMBED_MODEL: all-MiniLM-L6-v2
-      RERANK_MODEL: cross-encoder/ms-marco-MiniLM-L-6-v2
+      EMBED_MODEL_NAMES: '["all-MiniLM-L6-v2"]'
+      RERANK_MODEL_NAMES: '["cross-encoder/ms-marco-MiniLM-L-6-v2"]'
 ```
 
 Then start the server:
@@ -69,8 +75,8 @@ docker compose up -d
 
 ```bash
 docker run -p 8080:8080 \
-  -e EMBED_MODEL=all-MiniLM-L6-v2 \
-  -e RERANK_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2 \
+  -e EMBED_MODEL_NAMES='["all-MiniLM-L6-v2"]' \
+  -e RERANK_MODEL_NAMES='["cross-encoder/ms-marco-MiniLM-L-6-v2"]' \
   ghcr.io/empire-tm/sentence-api
 ```
 
@@ -102,6 +108,12 @@ curl http://localhost:8080/v1/embeddings \
       }'
 ```
 
+### List available embedding models
+
+```bash
+curl http://localhost:8080/v1/embeddings/models
+```
+
 ### Re-rank documents
 
 ```bash
@@ -119,16 +131,24 @@ curl http://localhost:8080/v1/rerank \
       }'
 ```
 
+### List available rerank models
+
+```bash
+curl http://localhost:8080/v1/rerank/models
+```
+
 The server responds with relevance scores (higher = better).
 
 ---
 
 ## Environment variables
 
-| Variable       | Default | Description                                                     |
-| -------------- | ------- | --------------------------------------------------------------- |
-| `EMBED_MODEL`  | `all-MiniLM-L6-v2` | HuggingFace / SentenceTransformers model for `/v1/embeddings`. |
-| `RERANK_MODEL` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Cross-encoder model for `/v1/rerank`.                           |
+| Variable             | Default (fallback)                         | Description                                                      |
+| --------------------|--------------------------------------------|------------------------------------------------------------------|
+| `EMBED_MODEL_NAMES`  | `["all-MiniLM-L6-v2"]`                     | JSON array of embedding model names to preload.                  |
+| `RERANK_MODEL_NAMES` | `["cross-encoder/ms-marco-MiniLM-L-6-v2"]` | JSON array of cross-encoder models to preload.                   |
+
+The first model in each list is used as default when no model is specified in the request.
 
 ---
 
@@ -138,11 +158,14 @@ Any model compatible with [SentenceTransformers](https://www.sbert.net/docs/pret
 
 Popular choices:
 
-* `all-MiniLM-L6-v2`
-* `multi-qa-MiniLM-L6-cos-v1`
-* `cross-encoder/ms-marco-MiniLM-L-6-v2`
+**Embedding models**
+- `all-MiniLM-L6-v2`
+- `multi-qa-MiniLM-L6-cos-v1`
+- `paraphrase-mpnet-base-v2`
 
-To serve multiple models run multiple containers, each pre-loaded with a different model.
+**Rerank (cross-encoder) models**
+- `cross-encoder/ms-marco-MiniLM-L-6-v2`
+- `cross-encoder/qnli-roberta-base`
 
 ---
 

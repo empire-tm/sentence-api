@@ -1,3 +1,4 @@
+import json
 from typing import Union, List, Dict, Optional
 from contextlib import asynccontextmanager
 import os
@@ -10,15 +11,22 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 embed_models: Dict[str, SentenceTransformer] = {}
 rerank_models: Dict[str, CrossEncoder] = {}
 
-EMBED_MODEL_NAME = os.getenv("EMBED_MODEL", "all-MiniLM-L6-v2")
-RERANK_MODEL_NAME = os.getenv("RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+EMBED_MODEL_NAMES = json.loads(os.getenv(
+    "EMBED_MODEL_NAMES", '["all-MiniLM-L6-v2"]'
+))
+RERANK_MODEL_NAMES = json.loads(os.getenv(
+    "RERANK_MODEL_NAMES", '["cross-encoder/ms-marco-MiniLM-L-6-v2"]'
+))
+
+DEFAULT_EMBED_MODEL = EMBED_MODEL_NAMES[0] if EMBED_MODEL_NAMES else None
+DEFAULT_RERANK_MODEL = RERANK_MODEL_NAMES[0] if RERANK_MODEL_NAMES else None
 
 # ---------------- Pydantic schemas ---------------- #
 class EmbeddingRequest(BaseModel):
     input: Union[str, List[str]] = Field(
         examples=["Cats are wonderful companions"]
     )
-    model: str = Field(default=EMBED_MODEL_NAME, examples=[EMBED_MODEL_NAME])
+    model: str = Field(default=DEFAULT_EMBED_MODEL, examples=EMBED_MODEL_NAMES)
 
 
 class EmbeddingData(BaseModel):
@@ -61,7 +69,7 @@ class RerankRequest(BaseModel):
     )
     top_n: Optional[int] = None
     return_documents: bool = False
-    model: str = Field(default=RERANK_MODEL_NAME, examples=[RERANK_MODEL_NAME])
+    model: str = Field(default=DEFAULT_RERANK_MODEL, examples=RERANK_MODEL_NAMES)
 
 
 class RerankResult(BaseModel):
@@ -79,30 +87,33 @@ class RerankResponse(BaseModel):
 # ---------------- App lifecycle ---------------- #
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Load models once during startup
-    if len(EMBED_MODEL_NAME) != 0:
-        embed_models[EMBED_MODEL_NAME] = SentenceTransformer(
-            EMBED_MODEL_NAME, trust_remote_code=True
-        )
-    if len(RERANK_MODEL_NAME) != 0:
-        rerank_models[RERANK_MODEL_NAME] = CrossEncoder(RERANK_MODEL_NAME)
+    # Embed-модели
+    for name in EMBED_MODEL_NAMES:
+        if name not in embed_models:
+            embed_models[name] = SentenceTransformer(name, trust_remote_code=True)
+
+    # Rerank-модели
+    for name in RERANK_MODEL_NAMES:
+        if name not in rerank_models:
+            rerank_models[name] = CrossEncoder(name)
+
     yield
 
 
 app = FastAPI(
         lifespan=lifespan, 
-        version="0.0.2", 
+        version="0.0.3", 
         title="Sentence API",
         summary="OpenAI-compatible API providing sentence embeddings and cross-encoder re-ranking powered by Sentence Transformers and FastAPI."
     )
 
 
 # ---------------- Endpoints ---------------- #
-@app.post("/v1/embeddings")
+@app.post("/v1/embeddings", tags=["Embeddings"])
 async def embedding(item: EmbeddingRequest) -> EmbeddingResponse:
     model_name = item.model
     model = embed_models.get(model_name)
-    if model is None or len(model_name) == 0:
+    if model is None:
         raise HTTPException(status_code=404, detail=f"embedding model '{model_name}' not loaded")
 
     def _encode(text: str) -> List[float]:
@@ -135,11 +146,16 @@ async def embedding(item: EmbeddingRequest) -> EmbeddingResponse:
     raise HTTPException(status_code=400, detail="input must be string or list[str]")
 
 
-@app.post("/v1/rerank")
+@app.get("/v1/embeddings/models", tags=["Embeddings"])
+async def get_embeddings_models() -> list[str]:
+    return EMBED_MODEL_NAMES
+
+
+@app.post("/v1/rerank", tags=["Rerank"])
 async def rerank(item: RerankRequest) -> RerankResponse:
     model_name = item.model
     model = rerank_models.get(model_name)
-    if model is None or len(model_name) == 0:
+    if model is None:
         raise HTTPException(status_code=404, detail=f"rerank model '{model_name}' not loaded")
 
     if not item.documents:
@@ -171,8 +187,11 @@ async def rerank(item: RerankRequest) -> RerankResponse:
     usage = Usage(prompt_tokens=total_tokens, total_tokens=total_tokens)
     return RerankResponse(model=model_name, usage=usage, results=results)
 
+@app.get("/v1/rerank/models", tags=["Rerank"])
+async def get_rerank_models() -> list[str]:
+    return RERANK_MODEL_NAMES
 
-@app.get("/")
-@app.get("/healthz")
+@app.get("/", tags=["System"])
+@app.get("/healthz", tags=["System"])
 async def healthz():
     return {"status": "ok"}
