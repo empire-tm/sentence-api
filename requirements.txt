@@ -1,0 +1,4 @@
+fastapi
+sentence-transformers==2.4.0
+uvicorn[standard]
+einops
