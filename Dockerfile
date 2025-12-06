@@ -13,7 +13,7 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
 COPY requirements.txt requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install --upgrade pip && \
-    pip3 install -r requirements.txt
+    pip3 install --no-cache-dir -r requirements.txt
 
 COPY main.py .
 COPY entrypoint.sh /usr/local/bin/
