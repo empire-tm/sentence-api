@@ -17,6 +17,7 @@ EMBED_MODEL_NAMES = json.loads(os.getenv(
 RERANK_MODEL_NAMES = json.loads(os.getenv(
     "RERANK_MODEL_NAMES", '["cross-encoder/ms-marco-MiniLM-L-6-v2"]'
 ))
+RERANK_MAX_LENGTH = int(os.getenv("RERANK_MAX_LENGTH", "512"))
 
 DEFAULT_EMBED_MODEL = EMBED_MODEL_NAMES[0] if EMBED_MODEL_NAMES else None
 DEFAULT_RERANK_MODEL = RERANK_MODEL_NAMES[0] if RERANK_MODEL_NAMES else None
@@ -102,7 +103,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
         lifespan=lifespan, 
-        version="0.0.3", 
+        version="0.0.5", 
         title="Sentence API",
         summary="OpenAI-compatible API providing sentence embeddings and cross-encoder re-ranking powered by Sentence Transformers and FastAPI."
     )
@@ -163,7 +164,7 @@ async def rerank(item: RerankRequest) -> RerankResponse:
 
     # Prepare sentence pairs
     pairs = [(item.query, doc.text) for doc in item.documents]
-    scores = model.predict(pairs).tolist()
+    scores = model.predict(pairs, max_length=RERANK_MAX_LENGTH).tolist()
 
     # Build ranking
     ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
