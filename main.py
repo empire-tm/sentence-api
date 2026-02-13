@@ -96,7 +96,7 @@ async def lifespan(app: FastAPI):
     # Rerank-модели
     for name in RERANK_MODEL_NAMES:
         if name not in rerank_models:
-            rerank_models[name] = CrossEncoder(name)
+            rerank_models[name] = CrossEncoder(name, max_length=RERANK_MAX_LENGTH)
 
     yield
 
@@ -111,7 +111,7 @@ app = FastAPI(
 
 # ---------------- Endpoints ---------------- #
 @app.post("/v1/embeddings", tags=["Embeddings"])
-async def embedding(item: EmbeddingRequest) -> EmbeddingResponse:
+def embedding(item: EmbeddingRequest) -> EmbeddingResponse:
     model_name = item.model
     model = embed_models.get(model_name)
     if model is None:
@@ -122,7 +122,7 @@ async def embedding(item: EmbeddingRequest) -> EmbeddingResponse:
 
     if isinstance(item.input, str):
         vec = _encode(item.input)
-        tokens = len(vec)
+        tokens = len(model.tokenizer.encode(item.input))
         return EmbeddingResponse(
             data=[EmbeddingData(embedding=vec, index=0)],
             model=model_name,
@@ -136,7 +136,7 @@ async def embedding(item: EmbeddingRequest) -> EmbeddingResponse:
             if not isinstance(text, str):
                 raise HTTPException(status_code=400, detail="input must be string or list[str]")
             vec = _encode(text)
-            tokens += len(vec)
+            tokens += len(model.tokenizer.encode(text))
             embeddings.append(EmbeddingData(embedding=vec, index=idx))
         return EmbeddingResponse(
             data=embeddings,
@@ -153,7 +153,7 @@ async def get_embeddings_models() -> list[str]:
 
 
 @app.post("/v1/rerank", tags=["Rerank"])
-async def rerank(item: RerankRequest) -> RerankResponse:
+def rerank(item: RerankRequest) -> RerankResponse:
     model_name = item.model
     model = rerank_models.get(model_name)
     if model is None:
@@ -162,13 +162,18 @@ async def rerank(item: RerankRequest) -> RerankResponse:
     if not item.documents:
         raise HTTPException(status_code=400, detail="documents list cannot be empty")
 
+    # Truncate texts to fit within max token length
+    def _truncate(text: str) -> str:
+        tokens = model.tokenizer.encode(text, truncation=True, max_length=RERANK_MAX_LENGTH)
+        return model.tokenizer.decode(tokens, skip_special_tokens=True)
+
     # Prepare sentence pairs
-    pairs = [(item.query, doc.text) for doc in item.documents]
-    scores = model.predict(pairs, max_length=RERANK_MAX_LENGTH).tolist()
+    pairs = [(_truncate(item.query), _truncate(doc.text)) for doc in item.documents]
+    scores = model.predict(pairs).tolist()
 
     # Build ranking
     ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
-    if item.top_n:
+    if item.top_n is not None:
         ranked = ranked[: item.top_n]
 
     results: List[RerankResult] = []
@@ -180,9 +185,10 @@ async def rerank(item: RerankRequest) -> RerankResponse:
             result.document = item.documents[idx]
         results.append(result)
 
-        # Rough token counting (query + doc)
-        total_tokens += len(model.tokenizer.encode(item.query)) + len(
-            model.tokenizer.encode(item.documents[idx].text)
+        # Token counting using truncated texts
+        query_text, doc_text = pairs[idx]
+        total_tokens += len(model.tokenizer.encode(query_text)) + len(
+            model.tokenizer.encode(doc_text)
         )
 
     usage = Usage(prompt_tokens=total_tokens, total_tokens=total_tokens)
